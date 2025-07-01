@@ -1,0 +1,106 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{hyperref}
+\geometry{margin=1in}
+
+\title{Option-Pricing: A C++ Library for FX Options}
+\author{Guido Aprea \\ \href{https://github.com/GAprea/Option-Pricing}{github.com/GAprea/Option-Pricing}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+Foreign-exchange (FX) options are fundamental building blocks in global finance, allowing market participants to hedge currency risk or speculate on future exchange rate moves. Under the risk-neutral measure, the spot rate $S$ evolves according to
+\[
+  \mathrm{d}S = (r_d - r_f)\,S\,\mathrm{d}t + \sigma\,S\,\mathrm{d}W,
+\]
+so that
+\[
+  \ln\!\bigl(S_T / S_0\bigr)
+  \sim
+  \mathcal{N}\!\Bigl((r_d - r_f - \tfrac12\sigma^2)\,T,\;\sigma^2\,T\Bigr).
+\]
+Here $r_d$ and $r_f$ are the domestic and foreign interest rates, and $\sigma$ is volatility. This library implements four methods to price a European FX call.
+
+\section*{Methods Provided}
+\begin{itemize}
+  \item \textbf{Analytical (Black–Scholes)}: closed-form formula under lognormal dynamics.
+  \item \textbf{Monte Carlo}: terminal payoff simulation with variance-reduction options.
+  \item \textbf{PDE (Crank–Nicolson)}: implicit finite-difference solver of the Black–Scholes PDE.
+  \item \textbf{Quadrature (Simpson’s Rule)}: numerical integration of the lognormal density.
+\end{itemize}
+
+\section{Explanation \& Notes}
+
+\subsection*{Black–Scholes}
+Define
+\[
+  d_1 = \frac{\ln(S_0/K) + (r_d - r_f + \tfrac12\sigma^2)\,T}{\sigma\sqrt{T}},
+  \quad
+  d_2 = d_1 - \sigma\sqrt{T}.
+\]
+Then
+\[
+  C = S_0 e^{-r_f T} N(d_1) - K e^{-r_d T} N(d_2),
+\]
+where $N(\cdot)$ is the standard normal CDF.
+
+\subsection*{Monte Carlo}
+Draw $Z_i\sim\mathcal N(0,1)$ and simulate
+\[
+  S_T^{(i)} = S_0 \exp\!\bigl((r_d - r_f - \tfrac12\sigma^2)T + \sigma\sqrt{T}\,Z_i\bigr).
+\]
+Compute the discounted payoff $\exp(-r_d T)\max(S_T^{(i)}-K,0)$ and average.
+
+\subsection*{PDE (Crank–Nicolson)}
+Solve backwards the PDE
+\[
+  V_t + (r_d - r_f)S\,V_S + \tfrac12\sigma^2 S^2\,V_{SS} - r_d\,V = 0
+\]
+on $[0,S_{\max}]\times[0,T]$, with terminal $V(S,T)=\max(S-K,0)$ and boundaries $V(0,t)=0$, $V(S_{\max},t)=S_{\max}-K e^{-r_d (T-t)}$.
+
+\subsection*{Quadrature (Simpson’s Rule)}
+Compute
+\[
+  \int_K^{S_{\max}} (S-K)\,f_{\mathrm{LN}}(S)\,\mathrm{d}S
+\]
+by composite Simpson’s rule, where $f_{\mathrm{LN}}$ is the risk-neutral lognormal density.
+
+\section{Complete C++ Implementation}
+
+\lstset{
+  language=C++, basicstyle=\ttfamily\small, breaklines=true,
+  keywordstyle=\bfseries, commentstyle=\itshape
+}
+\lstinputlisting[caption={src/fxoptions.cpp}]{src/fxoptions.cpp}
+
+\section{Summary of Pricing Results}
+
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Method                                   & Price     & Time (s) \\ 
+\midrule
+Black–Scholes                            & 0.0644887 & —        \\
+Monte Carlo (1,000,000 paths)            & 0.0644810 & 0.13     \\
+PDE (Crank–Nicolson, $200\times1000$)    & 0.0644779 & 0.009    \\
+Quadrature (Simpson’s Rule, 1000 steps)  & 0.0644887 & —        \\
+\bottomrule
+\end{tabular}
+
+\section{Description of Methods}
+
+\textbf{Black–Scholes:} exact formula, $O(1)$ eval.  
+
+\textbf{Monte Carlo:} flexible, extendable to path-dependent payoffs; variance reduction optional.  
+
+\textbf{PDE (Crank–Nicolson):} implicit FD, unconditionally stable, second-order accurate.  
+
+\textbf{Quadrature:} direct integration of the risk-neutral density.
+
+\end{document}
